@@ -645,12 +645,20 @@ SRC_IMG="$REPO_ROOT/bazel-bin/common/kernel_aarch64"
 [ -f "$SRC_IMG/Image" ] || die "未找到编译产物 Image ($SRC_IMG)"
 
 # 导出构建产物真实的解析配置(用于与设备 config 精确对比)
-KCFG="$(find "$SRC_IMG" "$REPO_ROOT/bazel-bin" -maxdepth 4 \( -name 'kernel_config' -o -name '.config' \) -type f 2>/dev/null | head -n1)"
+# kleaf 有独立的轻量目标 //common:kernel_aarch64_config, 输出在
+# bazel-bin/common/kernel_aarch64_config/out_dir/.config (bazel-bin 是符号链接, 需 -H)
+(
+    cd "$REPO_ROOT"
+    tools/bazel build --disk_cache="$WORK_ROOT/bazel-cache" --config=fast --lto=none \
+        //common:kernel_aarch64_config >/dev/null 2>&1 || true
+)
+KCFG="$(find -H "$SRC_IMG" "$REPO_ROOT/bazel-bin" -maxdepth 6 \
+    \( -name 'kernel_config' -o -name '.config' \) -type f 2>/dev/null | head -n1)"
 if [ -n "$KCFG" ]; then
     cp "$KCFG" "$OUT_DIR/kernel.config"
     log "已导出真实内核配置: $KCFG ($(wc -l < "$OUT_DIR/kernel.config") 行)"
 else
-    warn "未能在构建产物中找到 kernel_config"
+    warn "未能在构建产物中找到 kernel_config (不影响内核构建, 仅影响设备配置对比)"
 fi
 
 BASE="${ANDROID_VERSION}-${KERNEL_VERSION}.${SUBLEVEL}-${OS_PATCH_LEVEL}"
