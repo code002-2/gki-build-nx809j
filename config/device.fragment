@@ -1,10 +1,10 @@
 # NX809J (红魔 11) 设备配置补充
-# 来源: 设备内核 6.12.23 (固件 BQ2A.250705.001) 的 /proc/config.gz 与 GKI 基线对比
-# 以下配置在原厂内核中启用, 而 gki_defconfig 未包含(或默认关闭), 加入后与设备一致:
-#   ARM64_4K_PAGES: 设备内核为 4K 页 (uname 后缀 -4k), 必须显式匹配
-#   F2FS 压缩: 设备 data 分区使用 f2fs + lzo/lz4/zstd 压缩, 不开启将无法挂载压缩数据
-#   DM_USER: 设备存储方案依赖 (CONFIG_DM_USER=y)
-#   ZRAM: 默认压缩算法 lzo-rle 及后端 (与设备 ZRAM=m 一致)
+# 来源: 设备内核 6.12.23 (固件 BQ2A.250705.001) /proc/config.gz vs 构建产物 kernel.config
+#   首次对比(设备 vs GKI 基线)后加入: 4K 页 / F2FS 压缩 / DM_USER / ZRAM lzo-rle
+#   二次对比(设备 vs 解析后真实 config)后加入:
+#     AF_UNIX_OOB / ANDROID_STAGING / ASHMEM_RUST(Android 16 rust ashmem)
+#     BLK_WBT_MQ / STREAM_PARSER / TLS=m
+#   (HAVE_FUNCTION_GRAPH_RETVAL 为编译器自动推导, 不手动设置)
 CONFIG_ARM64_4K_PAGES=y
 
 CONFIG_F2FS_FS_COMPRESSION=y
@@ -19,3 +19,11 @@ CONFIG_DM_USER=y
 CONFIG_ZRAM_BACKEND_LZ4=y
 CONFIG_ZRAM_BACKEND_LZO=y
 CONFIG_ZRAM_DEF_COMP_LZORLE=y
+
+CONFIG_AF_UNIX_OOB=y
+CONFIG_ANDROID_STAGING=y
+CONFIG_ASHMEM_RUST=y
+CONFIG_BLK_WBT_MQ=y
+CONFIG_STREAM_PARSER=y
+CONFIG_TLS=m
+
