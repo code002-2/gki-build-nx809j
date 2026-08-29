@@ -1,0 +1,12 @@
+# Python/构建产物
+work/
+__pycache__/
+*.pyc
+
+# 补丁残留
+*.rej
+*.orig
+
+# 密钥
+*.pem
+*.key

@@ -1,0 +1,73 @@
+name: Build android16-6.12 GKI + KernelSU/SUSFS
+
+on:
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: "KernelSU 变体"
+        type: choice
+        default: Official
+        options:
+          - Official
+          - ReSukiSU
+          - SukiSU
+          - Next
+      source:
+        description: "内核源 (release=最新月度 GKI 发布, 推荐; tip=android16-6.12 分支头)"
+        type: choice
+        default: release
+        options:
+          - release
+          - tip
+      susfs:
+        description: "集成 SUSFS"
+        type: boolean
+        default: true
+      with_manager:
+        description: "顺带下载管理器 APK"
+        type: boolean
+        default: false
+      retention_days:
+        description: "产物保留天数"
+        type: number
+        default: 14
+
+  # 每周日自动构建一次最新版本
+  schedule:
+    - cron: "35 20 * * 0"
+
+concurrency:
+  group: gki-612-build
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装基础工具
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq zip unzip python3 python-is-python3
+
+      - name: 构建内核(自动识别最新 6.12 版本)
+        run: |
+          bash build.sh \
+            --variant "${{ github.event.inputs.variant || 'Official' }}" \
+            --source  "${{ github.event.inputs.source || 'release' }}" \
+            --susfs   "${{ (github.event.inputs.susfs || 'true') == 'true' && 'on' || 'off' }}" \
+            --with-manager "${{ (github.event.inputs.with_manager || 'false') == 'true' && 'on' || 'off' }}" \
+            --mirror google --slim on
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: gki-6.12-${{ github.run_number }}
+          path: work/out/
+          if-no-files-found: error
+          retention-days: ${{ github.event.inputs.retention_days || 14 }}
