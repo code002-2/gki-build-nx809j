@@ -3,8 +3,23 @@ name: Build android16-6.12 GKI + KernelSU/SUSFS
 on:
   workflow_dispatch:
     inputs:
-      variant:
-        description: "KernelSU 变体"
+      patch_level:
+        description: "安全补丁级别 (auto=最新月度发布, tip=分支头, lts=LTS, 或指定月份如 2026-09)"
+        type: choice
+        default: auto
+        options:
+          - auto
+          - tip
+          - lts
+          - 2026-09
+          - 2026-06
+          - 2026-03
+          - 2025-12
+          - 2025-09
+          - 2025-08
+          - 2025-07
+      kernelsu_variant:
+        description: "KernelSU 变体 (SukiSU 最新版不兼容 6.12)"
         type: choice
         default: Official
         options:
@@ -12,19 +27,62 @@ on:
           - ReSukiSU
           - SukiSU
           - Next
-      source:
-        description: "内核源 (release=最新月度 GKI 发布, 推荐; tip=android16-6.12 分支头)"
+      version_name:
+        description: "自定义版本名 (可选)"
+        type: string
+        default: ""
+      build_time:
+        description: "自定义构建时间 (可选, N或留空=当前UTC, 如 Sun Dec 01 08:10:00 UTC 2024)"
+        type: string
+        default: ""
+      use_kpm:
+        description: "KPM 功能 (patched 尚不支持, 仅 SukiSU/ReSukiSU/Next 变体)"
         type: choice
-        default: release
+        default: disabled
         options:
-          - release
-          - tip
-      susfs:
-        description: "集成 SUSFS"
+          - disabled
+          - enabled
+          - patched
+      droidspaces:
+        description: "Droidspaces 容器支持 (6.12 只有开/关)"
+        type: choice
+        default: off
+        options:
+          - off
+          - on
+      artifact_upload_mode:
+        description: "构建产物上传模式"
+        type: choice
+        default: "上传全部"
+        options:
+          - "仅上传 AnyKernel3.zip"
+          - "上传全部"
+      droidspaces_ntsync:
+        description: "启用 Droidspaces 容器 NTSync 支持 (需 Droidspaces 开启)"
         type: boolean
-        default: true
-      with_manager:
-        description: "顺带下载管理器 APK"
+        default: false
+      use_zram:
+        description: "启用 ZRAM 增强算法 (6.12 上游未适配, 选择后自动跳过)"
+        type: boolean
+        default: false
+      use_bbg:
+        description: "启用 BBG 防格机"
+        type: boolean
+        default: false
+      use_rekernel:
+        description: "启用 Re-Kernel 驱动"
+        type: boolean
+        default: false
+      cve_2026_43499_patch:
+        description: "应用 CVE-2026-43499 rtmutex 修复链"
+        type: boolean
+        default: false
+      cancel_susfs:
+        description: "禁用 SUSFS"
+        type: boolean
+        default: false
+      supp_op:
+        description: "启用一加 8E 支持"
         type: boolean
         default: false
       retention_days:
@@ -58,10 +116,20 @@ jobs:
       - name: 构建内核(自动识别最新 6.12 版本)
         run: |
           bash build.sh \
-            --variant "${{ github.event.inputs.variant || 'Official' }}" \
-            --source  "${{ github.event.inputs.source || 'release' }}" \
-            --susfs   "${{ (github.event.inputs.susfs || 'true') == 'true' && 'on' || 'off' }}" \
-            --with-manager "${{ (github.event.inputs.with_manager || 'false') == 'true' && 'on' || 'off' }}" \
+            --patch-level  "${{ github.event.inputs.patch_level || 'auto' }}" \
+            --variant      "${{ github.event.inputs.kernelsu_variant || 'Official' }}" \
+            --version-name "${{ github.event.inputs.version_name || '' }}" \
+            --build-time   "${{ github.event.inputs.build_time || '' }}" \
+            --kpm          "${{ github.event.inputs.use_kpm || 'disabled' }}" \
+            --droidspaces  "${{ github.event.inputs.droidspaces || 'off' }}" \
+            --ntsync       "${{ (github.event.inputs.droidspaces_ntsync || 'false') == 'true' && 'on' || 'off' }}" \
+            --artifact-mode "${{ github.event.inputs.artifact_upload_mode == '仅上传 AnyKernel3.zip' && 'anykernel3' || 'all' }}" \
+            --zram         "${{ (github.event.inputs.use_zram || 'false') == 'true' && 'on' || 'off' }}" \
+            --bbg          "${{ (github.event.inputs.use_bbg || 'false') == 'true' && 'on' || 'off' }}" \
+            --re-kernel    "${{ (github.event.inputs.use_rekernel || 'false') == 'true' && 'on' || 'off' }}" \
+            --cve          "${{ (github.event.inputs.cve_2026_43499_patch || 'false') == 'true' && 'on' || 'off' }}" \
+            --oneplus      "${{ (github.event.inputs.supp_op || 'false') == 'true' && 'on' || 'off' }}" \
+            --susfs        "${{ (github.event.inputs.cancel_susfs || 'false') == 'true' && 'off' || 'on' }}" \
             --mirror google --slim on
 
       - name: 上传产物
