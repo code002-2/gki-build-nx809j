@@ -536,6 +536,14 @@ CONFIG_KSU_SUSFS_SUS_MAP=y
 EOF
 fi
 
+# 设备配置补充(与设备原厂 config 对齐, 见 config/device.fragment)
+DEVICE_FRAGMENT="$SCRIPT_DIR/config/device.fragment"
+if [ -f "$DEVICE_FRAGMENT" ]; then
+    log "应用设备配置补充 $DEVICE_FRAGMENT:"
+    sed -E 's/^/  /' "$DEVICE_FRAGMENT"
+    sort -u "$DEVICE_FRAGMENT" >> "$DEFCONFIG"
+fi
+
 # ---------------- 12. 内核名称(版本名 / KMI 后缀) ----------------
 log "设置内核版本名..."
 (
@@ -635,6 +643,15 @@ log "打包产物..."
 mkdir -p "$OUT_DIR"
 SRC_IMG="$REPO_ROOT/bazel-bin/common/kernel_aarch64"
 [ -f "$SRC_IMG/Image" ] || die "未找到编译产物 Image ($SRC_IMG)"
+
+# 导出构建产物真实的解析配置(用于与设备 config 精确对比)
+KCFG="$(find "$SRC_IMG" "$REPO_ROOT/bazel-bin" -maxdepth 4 \( -name 'kernel_config' -o -name '.config' \) -type f 2>/dev/null | head -n1)"
+if [ -n "$KCFG" ]; then
+    cp "$KCFG" "$OUT_DIR/kernel.config"
+    log "已导出真实内核配置: $KCFG ($(wc -l < "$OUT_DIR/kernel.config") 行)"
+else
+    warn "未能在构建产物中找到 kernel_config"
+fi
 
 BASE="${ANDROID_VERSION}-${KERNEL_VERSION}.${SUBLEVEL}-${OS_PATCH_LEVEL}"
 

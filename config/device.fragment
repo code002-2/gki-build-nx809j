@@ -1,0 +1,21 @@
+# NX809J (红魔 11) 设备配置补充
+# 来源: 设备内核 6.12.23 (固件 BQ2A.250705.001) 的 /proc/config.gz 与 GKI 基线对比
+# 以下配置在原厂内核中启用, 而 gki_defconfig 未包含(或默认关闭), 加入后与设备一致:
+#   ARM64_4K_PAGES: 设备内核为 4K 页 (uname 后缀 -4k), 必须显式匹配
+#   F2FS 压缩: 设备 data 分区使用 f2fs + lzo/lz4/zstd 压缩, 不开启将无法挂载压缩数据
+#   DM_USER: 设备存储方案依赖 (CONFIG_DM_USER=y)
+#   ZRAM: 默认压缩算法 lzo-rle 及后端 (与设备 ZRAM=m 一致)
+CONFIG_ARM64_4K_PAGES=y
+
+CONFIG_F2FS_FS_COMPRESSION=y
+CONFIG_F2FS_FS_LZO=y
+CONFIG_F2FS_FS_LZORLE=y
+CONFIG_F2FS_FS_LZ4=y
+CONFIG_F2FS_FS_LZ4HC=y
+CONFIG_F2FS_FS_ZSTD=y
+
+CONFIG_DM_USER=y
+
+CONFIG_ZRAM_BACKEND_LZ4=y
+CONFIG_ZRAM_BACKEND_LZO=y
+CONFIG_ZRAM_DEF_COMP_LZORLE=y
