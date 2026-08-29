@@ -40,6 +40,16 @@ has_ref() { # $1=url $2=ref 模式
     [ -n "$out" ]
 }
 
+# 分支健康探测: AOSP 会提前建好一条"空分支"(ref 存在但文件未推),
+# 例如 android16-6.12-2026-09 就是空的; 通过 gitiles 取 Makefile 判断是否已填充。
+gitiles_healthy() { # $1=common 分支名
+    local body
+    body="$(curl -fsSL --max-time 30 \
+        "https://android.googlesource.com/kernel/common/+/refs/heads/$1/Makefile?format=TEXT" 2>/dev/null \
+        | base64 -d 2>/dev/null || true)"
+    [ -n "$body" ] && grep -q '^SUBLEVEL' <<<"$body"
+}
+
 emit() { # $1=mode $2=manifest分支 $3=common分支 $4=month $5=deprecated(0/1)
     echo "DETECT_SOURCE_MODE=$1"
     echo "DETECT_MANIFEST_BRANCH=$2"
@@ -53,8 +63,10 @@ echo "[detect] 源: $MIRROR  目标: $ANDROID_VERSION-$KERNEL_VERSION  补丁级
 
 # ---------- tip ----------
 if [ "$PATCH_LEVEL" = "tip" ]; then
+    cb="${ANDROID_VERSION}-${KERNEL_VERSION}"
+    gitiles_healthy "$cb" || { echo "错误: $cb 分支尚未填充(空分支)" >&2; exit 1; }
     echo "[detect] 使用 android16-6.12 分支头(最新代码)" >&2
-    emit tip "common-${ANDROID_VERSION}-${KERNEL_VERSION}" "${ANDROID_VERSION}-${KERNEL_VERSION}" tip 0
+    emit tip "common-${ANDROID_VERSION}-${KERNEL_VERSION}" "$cb" tip 0
     exit 0
 fi
 
@@ -64,6 +76,7 @@ if [ "$PATCH_LEVEL" = "lts" ]; then
     cb="${ANDROID_VERSION}-${KERNEL_VERSION}-lts"
     has_ref "$MANIFEST_URL" "refs/heads/${mb}" || { echo "错误: manifest 无 $mb" >&2; exit 1; }
     has_ref "$COMMON_URL" "refs/heads/${cb}" || { echo "错误: kernel/common 无 $cb" >&2; exit 1; }
+    gitiles_healthy "$cb" || { echo "错误: $cb 分支尚未填充(空分支)" >&2; exit 1; }
     echo "[detect] 使用 LTS 分支: $cb" >&2
     emit lts "$mb" "$cb" lts 0
     exit 0
@@ -81,6 +94,7 @@ if [[ "$PATCH_LEVEL" =~ ^[0-9]{4}-[0-9]{2}$ ]]; then
     else
         echo "错误: kernel/common 分支不存在: $cb" >&2; exit 1
     fi
+    gitiles_healthy "$cb" || { echo "错误: $cb 分支尚未填充(空分支), 请换其他月份" >&2; exit 1; }
     echo "[detect] 使用指定月份: $cb (deprecated=$dep)" >&2
     emit fixed "$mb" "$cb" "$PATCH_LEVEL" "$dep"
     exit 0
@@ -111,6 +125,11 @@ for mon in "${cands[@]}"; do
     elif has_ref "$COMMON_URL" "refs/heads/deprecated/${cb}"; then
         dep=1
     else
+        continue
+    fi
+    # 跳过 AOSP 提前创建但尚未填充的空分支(如 android16-6.12-2026-09)
+    if ! gitiles_healthy "$cb"; then
+        echo "[detect] 跳过空分支 $cb (ref 存在但文件未填充)" >&2
         continue
     fi
     found="$mon"
