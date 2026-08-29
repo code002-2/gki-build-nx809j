@@ -19,7 +19,7 @@ on:
           - 2025-08
           - 2025-07
       kernelsu_variant:
-        description: "KernelSU 变体 (SukiSU 最新版不兼容 6.12)"
+        description: "KernelSU 变体 (None=不集成 KernelSU/不引入 root 管理器, 纯内核; SukiSU 最新版不兼容 6.12)"
         type: choice
         default: Official
         options:
@@ -27,6 +27,7 @@ on:
           - ReSukiSU
           - SukiSU
           - Next
+          - None
       version_name:
         description: "自定义版本名 (可选)"
         type: string
@@ -109,6 +110,17 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq zip unzip python3 python-is-python3
+
+      - name: 恢复缓存 (bazel 增量/工具链)
+        uses: actions/cache@v4
+        with:
+          path: |
+            work/bazel-cache
+            ~/.cache/bazel
+          key: bazel-${{ github.event.inputs.patch_level || 'auto' }}-${{ github.event.inputs.kernelsu_variant || 'Official' }}
+          restore-keys: |
+            bazel-${{ github.event.inputs.patch_level || 'auto' }}-${{ github.event.inputs.kernelsu_variant || 'Official' }}
+            bazel-
 
       - name: 构建内核(自动识别最新 6.12 版本)
         run: |

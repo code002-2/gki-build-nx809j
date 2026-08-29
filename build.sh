@@ -109,7 +109,14 @@ for v in ENABLE_SUSFS DROIDSPACES_NTSYNC USE_ZRAM USE_BBG USE_REKERNEL CVE_2026_
 done
 if [ "$(bool "$CANCEL_SUSFS")" = "true" ]; then ENABLE_SUSFS="false"; fi
 
-case "$KSU_VARIANT" in Official|ReSukiSU|SukiSU|Next) ;; *) die "未知 KSU_VARIANT: $KSU_VARIANT" ;; esac
+case "$KSU_VARIANT" in Official|ReSukiSU|SukiSU|Next|None) ;; *) die "未知 KSU_VARIANT: $KSU_VARIANT" ;; esac
+# None = 纯内核, 不集成 KernelSU, 因此 SUSFS/KPM/管理器全部关闭
+if [ "$KSU_VARIANT" = "None" ]; then
+    warn "KSU 变体为 None: 不集成 KernelSU / SUSFS / KPM / 管理器 (纯内核构建)"
+    ENABLE_SUSFS="false"
+    USE_KPM="disabled"
+    WITH_MANAGER="false"
+fi
 case "$USE_KPM" in disabled|enabled|patched) ;; *) die "USE_KPM 只能是 disabled/enabled/patched" ;; esac
 case "$ARTIFACT_MODE" in all|anykernel3) ;; *) die "ARTIFACT_MODE 只能是 all/anykernel3" ;; esac
 # 兼容 true/false(部分前端会把 on/off 序列化成布尔)
@@ -294,7 +301,8 @@ if [ "$SUPP_OP" = "true" ]; then
     echo "obj-y += hmbird_patch.o" >> "$REPO_ROOT/common/drivers/Makefile"
 fi
 
-# ---------------- 5. 集成 KernelSU ----------------
+# ---------------- 5. 集成 KernelSU (None = 纯内核, 跳过) ----------------
+if [ "$KSU_VARIANT" != "None" ]; then
 case "$KSU_VARIANT" in
     Official)  KSU_REPO="https://github.com/tiann/KernelSU.git";            KSU_BRANCH="main" ;;
     ReSukiSU)  KSU_REPO="https://github.com/ReSukiSU/ReSukiSU.git";         KSU_BRANCH="main" ;;
@@ -333,6 +341,7 @@ if [ -d "$REPO_ROOT/KernelSU/.git" ]; then
     fi
 fi
 log "KernelSU: $KSU_VARIANT  v$KSU_VERSION  $KSU_COMMIT  ($KSU_DATE)"
+fi # KSU_VARIANT != None
 
 # ---------------- 6. SUSFS(使用 vendored 的 susfs_fixes/apply.sh, 与上游逐字一致) ----------------
 SUSFS4KSU="$WORK_ROOT/susfs4ksu"
@@ -504,10 +513,12 @@ fi
 # ---------------- 11. 内核配置 ----------------
 log "追加内核配置..."
 cat >> "$DEFCONFIG" <<'EOF'
-CONFIG_KSU=y
 CONFIG_TMPFS_XATTR=y
 CONFIG_TMPFS_POSIX_ACL=y
 EOF
+if [ "$KSU_VARIANT" != "None" ]; then
+    echo "CONFIG_KSU=y" >> "$DEFCONFIG"
+fi
 
 if [ "$USE_KPM" != "disabled" ] &&
    { [ "$KSU_VARIANT" = "SukiSU" ] || [ "$KSU_VARIANT" = "ReSukiSU" ] || [ "$KSU_VARIANT" = "Next" ]; }; then
