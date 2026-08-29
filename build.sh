@@ -112,7 +112,12 @@ if [ "$(bool "$CANCEL_SUSFS")" = "true" ]; then ENABLE_SUSFS="false"; fi
 case "$KSU_VARIANT" in Official|ReSukiSU|SukiSU|Next) ;; *) die "未知 KSU_VARIANT: $KSU_VARIANT" ;; esac
 case "$USE_KPM" in disabled|enabled|patched) ;; *) die "USE_KPM 只能是 disabled/enabled/patched" ;; esac
 case "$ARTIFACT_MODE" in all|anykernel3) ;; *) die "ARTIFACT_MODE 只能是 all/anykernel3" ;; esac
-case "$DROIDSPACES" in off|on) ;; *) die "6.12 的 DROIDSPACES 只能是 off/on" ;; esac
+# 兼容 true/false(部分前端会把 on/off 序列化成布尔)
+case "$DROIDSPACES" in
+    on|true|yes|1)  DROIDSPACES="on" ;;
+    off|false|no|0) DROIDSPACES="off" ;;
+    *) die "DROIDSPACES 只能是 on/off: $DROIDSPACES" ;;
+esac
 if [ "$DROIDSPACES_NTSYNC" = "true" ] && [ "$DROIDSPACES" != "on" ]; then
     warn "NTSync 需要 Droidspaces 开启, 已自动忽略 NTSync"
     DROIDSPACES_NTSYNC="false"
@@ -502,6 +507,9 @@ elif [ ! -f "$REPO_ROOT/build/build.sh" ]; then
 fi
 
 # ---------------- 13. 自定义构建时间 ----------------
+if [ "$BUILD_TIME" = "N" ] || [ "$BUILD_TIME" = "n" ]; then
+    BUILD_TIME=""
+fi
 if [ -n "$BUILD_TIME" ]; then
     TIME_REGEX='^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) (0[1-9]|[12][0-9]|3[01]) ([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9] UTC [0-9]{4}$'
     [[ "$BUILD_TIME" =~ $TIME_REGEX ]] || die "构建时间格式错误, 必须形如 'Sun Dec 01 08:10:00 UTC 2024'"

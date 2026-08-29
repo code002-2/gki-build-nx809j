@@ -44,12 +44,9 @@ on:
           - enabled
           - patched
       droidspaces:
-        description: "Droidspaces 容器支持 (6.12 只有开/关)"
-        type: choice
-        default: off
-        options:
-          - off
-          - on
+        description: "Droidspaces 容器支持 (开/关)"
+        type: boolean
+        default: false
       artifact_upload_mode:
         description: "构建产物上传模式"
         type: choice
@@ -121,7 +118,7 @@ jobs:
             --version-name "${{ github.event.inputs.version_name || '' }}" \
             --build-time   "${{ github.event.inputs.build_time || '' }}" \
             --kpm          "${{ github.event.inputs.use_kpm || 'disabled' }}" \
-            --droidspaces  "${{ github.event.inputs.droidspaces || 'off' }}" \
+            --droidspaces  "${{ (github.event.inputs.droidspaces || 'false') == 'true' && 'on' || 'off' }}" \
             --ntsync       "${{ (github.event.inputs.droidspaces_ntsync || 'false') == 'true' && 'on' || 'off' }}" \
             --artifact-mode "${{ github.event.inputs.artifact_upload_mode == '仅上传 AnyKernel3.zip' && 'anykernel3' || 'all' }}" \
             --zram         "${{ (github.event.inputs.use_zram || 'false') == 'true' && 'on' || 'off' }}" \
