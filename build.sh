@@ -202,7 +202,20 @@ JFLAG=""
 (cd "$REPO_ROOT" && "$REPO_SCRIPT" sync -c --no-tags --fail-fast $JFLAG)
 
 COMMON_MAKEFILE="$REPO_ROOT/common/Makefile"
-[ -f "$COMMON_MAKEFILE" ] || die "同步后未找到 common/Makefile"
+if [ ! -f "$COMMON_MAKEFILE" ]; then
+    warn "repo sync 后未找到 common/Makefile, 输出诊断信息:"
+    echo "---- ls -la $REPO_ROOT ----"
+    ls -la "$REPO_ROOT" 2>&1 | head -n 25 || true
+    echo "---- manifest 中 common 项目 ----"
+    grep -n 'path="common"' "$MDEFAULT" 2>&1 || true
+    echo "---- 兜底: 直接浅克隆 kernel/common ($COMMON_BRANCH) ----"
+    git clone --depth 1 --single-branch -b "$COMMON_BRANCH" \
+        "$(mirror_base "$MIRROR")/kernel/common" "$REPO_ROOT/common.tmp" \
+        || die "兜底克隆 kernel/common 失败"
+    rm -rf "$REPO_ROOT/common"
+    mv "$REPO_ROOT/common.tmp" "$REPO_ROOT/common"
+fi
+[ -f "$COMMON_MAKEFILE" ] || die "同步后仍未找到 common/Makefile"
 SUBLEVEL="$(grep '^SUBLEVEL = ' "$COMMON_MAKEFILE" | awk '{print $3}')"
 [ -n "$SUBLEVEL" ] || die "无法从 Makefile 读取 SUBLEVEL"
 KERNEL_COMMIT="$(git -C "$REPO_ROOT/common" rev-parse --short=12 HEAD)"
