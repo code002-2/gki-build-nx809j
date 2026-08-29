@@ -192,8 +192,40 @@ if [ "$DEPRECATED" = "1" ] && ! grep -q "deprecated/${COMMON_BRANCH}" "$MDEFAULT
 fi
 
 if [ "$SLIM" = "true" ]; then
-    perl -ni -e 'print unless m{<project path="(bootable/|external/arm-trusted-firmware|external/avb|external/boringssl|external/compiler-rt|external/dtc|external/libufdt|external/open-dice|external/elfutils|external/googletest|external/rust/crates/|prebuilts/fuchsia_sdk|prebuilts/jdk/jdk11|test/ltp|system/core)"}' "$MDEFAULT"
+    # 用 python3 改写 manifest (repo sync 会刷新 manifest, 不能依赖 sed -i 之外的 perl)
+    python3 - "$MDEFAULT" <<'PYEOF'
+import re, sys
+path = sys.argv[1]
+with open(path, "r", encoding="utf-8") as f:
+    content = f.read()
+removed = [
+    "bootable/",
+    "external/arm-trusted-firmware",
+    "external/avb",
+    "external/boringssl",
+    "external/compiler-rt",
+    "external/dtc",
+    "external/libufdt",
+    "external/open-dice",
+    "external/elfutils",
+    "external/googletest",
+    "external/rust/crates/",
+    "prebuilts/fuchsia_sdk",
+    "prebuilts/jdk/jdk11",
+    "test/ltp",
+    "system/core",
+]
+pat = re.compile(r'<project path="(%s)"' % "|".join(re.escape(r) for r in removed))
+lines = content.splitlines(keepends=True)
+kept = [l for l in lines if not pat.search(l)]
+with open(path, "w", encoding="utf-8") as f:
+    f.writelines(kept)
+print(f"removed {len(lines)-len(kept)} project lines (slim)")
+PYEOF
     log "slim sync: 已跳过 GBL 相关项目"
+    # 提交到 manifest 仓库, 防止 repo sync 刷新 manifest 时覆盖修改
+    git -C "$REPO_ROOT/.repo/manifests" add -A 2>/dev/null || true
+    git -C "$REPO_ROOT/.repo/manifests" commit -m "slim: drop GBL-related projects" 2>/dev/null || true
 fi
 
 log "repo sync (首次约 20-60 分钟)..."
@@ -203,17 +235,36 @@ JFLAG=""
 
 COMMON_MAKEFILE="$REPO_ROOT/common/Makefile"
 if [ ! -f "$COMMON_MAKEFILE" ]; then
-    warn "repo sync 后未找到 common/Makefile, 输出诊断信息:"
-    echo "---- ls -la $REPO_ROOT ----"
-    ls -la "$REPO_ROOT" 2>&1 | head -n 25 || true
-    echo "---- manifest 中 common 项目 ----"
+    warn "repo sync 后未找到 common/Makefile, 先执行 repo sync common 项目..."
+    (cd "$REPO_ROOT" && "$REPO_SCRIPT" sync -c --no-tags common) || true
+fi
+if [ ! -f "$COMMON_MAKEFILE" ]; then
+    warn "repo sync common 仍未生效, 输出诊断:"
+    ls -la "$REPO_ROOT/common" 2>&1 | head -n 10 || true
     grep -n 'path="common"' "$MDEFAULT" 2>&1 || true
-    echo "---- 兜底: 直接浅克隆 kernel/common ($COMMON_BRANCH) ----"
-    git clone --depth 1 --single-branch -b "$COMMON_BRANCH" \
-        "$(mirror_base "$MIRROR")/kernel/common" "$REPO_ROOT/common.tmp" \
-        || die "兜底克隆 kernel/common 失败"
-    rm -rf "$REPO_ROOT/common"
-    mv "$REPO_ROOT/common.tmp" "$REPO_ROOT/common"
+    log "兜底: 浅克隆 kernel/common ($COMMON_BRANCH) [镜像链 google->ustc->nju]..."
+    CLONE_OK=false
+    for CMIRROR in "$MIRROR" ustc nju; do
+        CURL="$(case "$CMIRROR" in
+            ustc)   echo "https://mirrors.ustc.edu.cn/aosp" ;;
+            nju)    echo "https://mirror.nju.edu.cn/git/aosp" ;;
+            google) echo "https://android.googlesource.com" ;;
+        esac)/kernel/common"
+        warn "尝试 $CURL ..."
+        rm -rf "$REPO_ROOT/common.tmp"
+        if git clone --depth 1 --single-branch -b "$COMMON_BRANCH" "$CURL" "$REPO_ROOT/common.tmp" 2>&1 | tail -n 3 \
+            && [ -f "$REPO_ROOT/common.tmp/Makefile" ]; then
+            CLONE_OK=true
+            break
+        fi
+    done
+    if [ "$CLONE_OK" = "true" ]; then
+        rm -rf "$REPO_ROOT/common"
+        mv "$REPO_ROOT/common.tmp" "$REPO_ROOT/common"
+        warn "已用镜像兜底克隆 common 成功"
+    else
+        die "兜底克隆 kernel/common 失败"
+    fi
 fi
 [ -f "$COMMON_MAKEFILE" ] || die "同步后仍未找到 common/Makefile"
 SUBLEVEL="$(grep '^SUBLEVEL = ' "$COMMON_MAKEFILE" | awk '{print $3}')"
