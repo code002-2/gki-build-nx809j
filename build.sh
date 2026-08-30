@@ -630,6 +630,17 @@ log "开始编译 (bazel/kleaf, 首次约 30-90 分钟)..."
 LOG_DIR="$WORK_ROOT/build-logs"
 mkdir -p "$LOG_DIR"
 
+# 先统一生成 ksu.fragment(defconfig 修改 diff 到 fragment, 避免 bazel trim 检查失败)
+FRAG="$REPO_ROOT/common/arch/arm64/configs/ksu.fragment"
+diff "$BASELINE" "$DEFCONFIG" | grep '^>' | sed 's/^> //; s/^[[:space:]]*//' > "$FRAG" || true
+cp "$BASELINE" "$DEFCONFIG"
+echo "=== ksu.fragment ==="
+cat "$FRAG"
+echo "====================="
+FRAG_FLAG=""
+[ -s "$FRAG" ] && FRAG_FLAG="--defconfig_fragment=//common:arch/arm64/configs/ksu.fragment"
+mkdir -p "$WORK_ROOT/bazel-cache"
+
 compile() { # $1=attempt
     set -o pipefail
     (
@@ -638,17 +649,6 @@ compile() { # $1=attempt
         sed -i '/MODULES_ORDER=android\/gki_aarch64_modules/d' ./common/build.config.gki.aarch64 || true
         sed -i '/KMI_SYMBOL_LIST_STRICT_MODE/d' ./common/build.config.gki.aarch64 || true
 
-        # defconfig 修改 diff 成 fragment, 避免 bazel trim 检查失败
-        FRAG="common/arch/arm64/configs/ksu.fragment"
-        diff "$BASELINE" "$DEFCONFIG" | grep '^>' | sed 's/^> //; s/^[[:space:]]*//' > "$FRAG" || true
-        cp "$BASELINE" "$DEFCONFIG"
-        echo "=== ksu.fragment ==="
-        cat "$FRAG"
-        echo "====================="
-
-        FRAG_FLAG=""
-        [ -s "$FRAG" ] && FRAG_FLAG="--defconfig_fragment=//common:arch/arm64/configs/ksu.fragment"
-        mkdir -p "$WORK_ROOT/bazel-cache"
         tools/bazel build --disk_cache="$WORK_ROOT/bazel-cache" --config=fast --lto=none $FRAG_FLAG \
             //common:kernel_aarch64_dist
         strings ./bazel-bin/common/kernel_aarch64/Image 2>/dev/null | grep -m1 'Linux version' || true
@@ -673,11 +673,10 @@ SRC_IMG="$REPO_ROOT/bazel-bin/common/kernel_aarch64"
 [ -f "$SRC_IMG/Image" ] || die "未找到编译产物 Image ($SRC_IMG)"
 
 # 导出构建产物真实的解析配置(用于与设备 config 精确对比)
-# kleaf 有独立的轻量目标 //common:kernel_aarch64_config, 输出在
-# bazel-bin/common/kernel_aarch64_config/out_dir/.config (bazel-bin 是符号链接, 需 -H)
+# 必须与主构建使用相同的 fragment, 否则导出的不是真实构建配置
 (
     cd "$REPO_ROOT"
-    tools/bazel build --disk_cache="$WORK_ROOT/bazel-cache" --config=fast --lto=none \
+    tools/bazel build --disk_cache="$WORK_ROOT/bazel-cache" --config=fast --lto=none $FRAG_FLAG \
         //common:kernel_aarch64_config >/dev/null 2>&1 || true
 )
 KCFG="$(find -H "$SRC_IMG" "$REPO_ROOT/bazel-bin" -maxdepth 6 \
