@@ -302,6 +302,10 @@ if [ "$SUPP_OP" = "true" ]; then
 fi
 
 # ---------------- 5. 集成 KernelSU (None = 纯内核, 跳过) ----------------
+# 统一初始化, 避免 None 模式下引用未绑定变量
+KSU_VERSION=""
+KSU_COMMIT=""
+KSU_DATE=""
 if [ "$KSU_VARIANT" != "None" ]; then
 case "$KSU_VARIANT" in
     Official)  KSU_REPO="https://github.com/tiann/KernelSU.git";            KSU_BRANCH="main" ;;
