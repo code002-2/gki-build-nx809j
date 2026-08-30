@@ -555,6 +555,19 @@ if [ -f "$DEVICE_FRAGMENT" ]; then
     sort -u "$DEVICE_FRAGMENT" >> "$DEFCONFIG"
 fi
 
+# TLS=m (与设备对齐): tls.ko 不在 GKI 声明列表, dist 会报 "built but not copied"。
+# 补进 kernel_aarch64 的 module_implicit_outs; 若补丁失败则自动移除 TLS=m 配置。
+if grep -q '^CONFIG_TLS=m$' "$DEFCONFIG"; then
+    if sed -i 's/^[[:space:]]*module_implicit_outs = get_gki_modules_list("arm64") + get_kunit_modules_list("arm64"),\s*$/    module_implicit_outs = get_gki_modules_list("arm64") + get_kunit_modules_list("arm64") + ["net\/tls\/tls.ko"],/' \
+           "$REPO_ROOT/common/BUILD.bazel" \
+        && grep -q 'net/tls/tls.ko' "$REPO_ROOT/common/BUILD.bazel"; then
+        log "已将 net/tls/tls.ko 声明进 module_implicit_outs"
+    else
+        warn "module_implicit_outs 补丁失败, 自动移除 TLS=m"
+        sed -i '/^CONFIG_TLS=m$/d' "$DEFCONFIG"
+    fi
+fi
+
 # ---------------- 12. 内核名称(版本名 / KMI 后缀) ----------------
 log "设置内核版本名..."
 (
